@@ -1,0 +1,86 @@
+Project code
+
+.include p18_model_card.inc
+.include p18_cmos_models_ss.inc
+
+* Photo Diode handout *
+
+.subckt PhotoDiode VDD N1_R1C1
+	I1_R1C1 VDD N1_R1C1 DC Ipd_1                		! Photo current source
+	d1 N1_R1C1 VDD dwell 1						! Reverse biased Diode
+	.model dwell d cj0=1e-14 is=1e-12 m=0.5 bv=40		! Diode model
+	Cd1 N1_R1C1 VDD 30f                             	! Photo diode capacitor
+.ends
+
+* Parameters *
+
+.param L_M1 = 1.07u
+.param W_M1 = 1.09u
+.param L_M2 = 1.07u
+.param W_M2 = 1.09u
+.param L_M3 = 0.37u
+.param W_M3 = 5.03u
+.param L_M4 = 0.37u
+.param W_M4 = 5.03u
+
+.param L_MC = 1.07u	! L_MC1 = L_MC2
+.param W_MC = 1.09u	! W_MC2 = W_MC2
+
+.param CS_C = 2.75p
+.param CC_C = 3p
+
+* Test bench handout *
+
+.param Ipd_1 = 750p ! Photodiode current, range [50 pA, 750 pA]
+.param VDD = 1.8 ! Supply voltage
+.param EXPOSURETIME = 2m ! Exposure time, range [2 ms, 30 ms]
+
+.param TRF = {EXPOSURETIME/100}				! Risetime and falltime of EXPOSURE and ERASE signals
+.param PW = {EXPOSURETIME} 					! Pulsewidth of EXPOSURE and ERASE signals
+.param PERIOD = {EXPOSURETIME*10}				! Period for testbench sources
+.param FS = 1k;							! Sampling clock frequency 
+.param CLK_PERIOD = {1/FS} 					! Sampling clock period
+.param EXPOSE_DLY = {CLK_PERIOD} 				! Delay for EXPOSE signal
+.param NRE_R1_DLY = {2*CLK_PERIOD + EXPOSURETIME} 	! Delay for NRE_R1 signal
+.param NRE_R2_DLY = {4*CLK_PERIOD + EXPOSURETIME} 	! Delay for NRE_R2 signal
+.param ERASE_DLY = {6*CLK_PERIOD + EXPOSURETIME} 	! Delay for ERASE signal
+
+VDD VDD 0 dc VDD
+VEXPOSE EXPOSE 0 dc 0 pulse(0 VDD EXPOSE_DLY TRF TRF EXPOSURETIME PERIOD)
+VERASE ERASE 0 dc 0 pulse(0 VDD ERASE_DLY TRF TRF CLK_PERIOD PERIOD)
+VNRE_R1 NRE_R1 0 dc 0 pulse(VDD 0 NRE_R1_DLY TRF TRF CLK_PERIOD PERIOD)
+VNRE_R2 NRE_R2 0 dc 0  pulse(VDD 0 NRE_R2_DLY TRF TRF CLK_PERIOD PERIOD)
+
+* Pixel Circuit *
+
+.subckt PixelCircuit VDD VSS EXPOSE ERASE NRE OUT N2
+    XPD1 VDD N1 PhotoDiode
+
+    M1 N1 EXPOSE N2 VSS NMOS L=L_M1 W=W_M1
+    M2 N2 ERASE VSS VSS NMOS L=L_M2 W=W_M2
+    M3 VSS N2 N3 VDD PMOS L=L_M3 W=W_M3
+    M4 N3 NRE OUT VDD PMOS L=L_M4 W=W_M4
+
+    CS N2 VSS CS_C
+.ends
+
+* Active Load *
+
+.subckt ActiveLoad VDD VSS OUT
+    MC OUT OUT VDD VDD PMOS L=L_MC W=W_MC
+
+    CC OUT VSS CC_C
+.ends
+
+* Camera Circuit *
+
+XPixel_1_1 VDD 0 EXPOSE ERASE NRE_R1 OUT1 N2 PixelCircuit
+XPixel_2_1 VDD 0 EXPOSE ERASE NRE_R2 OUT1 N2 PixelCircuit
+XPixel_1_2 VDD 0 EXPOSE ERASE NRE_R1 OUT2 N2 PixelCircuit
+XPixel_2_2 VDD 0 EXPOSE ERASE NRE_R2 OUT2 N2 PixelCircuit
+XActiveLoad_1 VDD 0 OUT1 ActiveLoad 
+XActiveLoad_2 VDD 0 OUT2 ActiveLoad 
+
+* Plot *
+
+.plot V(N2) V(EXPOSE) V(ERASE) V(NRE_R1) V(NRE_R2) V(OUT1) V(OUT2)
